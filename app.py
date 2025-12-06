@@ -332,13 +332,17 @@ def get_user_note(conn_unused, user_id, question_id):
         user_conn.close()
 
 def getnexttopic(conn, subjectname, currenttopic):
+    """Get next topic sorted by chapter then topic name - FIXED"""
+    # Get ALL topics with their chapters, ordered properly
     topics = conn.execute("""
-        SELECT DISTINCT topic FROM qbank 
-        WHERE LOWER(subject) = ? AND topic != '' 
-        ORDER BY chapter, topic  # ← Add chapter first
+        SELECT DISTINCT topic, chapter 
+        FROM qbank 
+        WHERE LOWER(subject) = ? AND topic != '' AND topic != 'None'
+        ORDER BY chapter ASC, topic ASC
     """, (subjectname.lower(),)).fetchall()
     
     topiclist = [t['topic'] for t in topics]
+    
     try:
         currentindex = topiclist.index(currenttopic)
         if currentindex < len(topiclist) - 1:
@@ -346,6 +350,7 @@ def getnexttopic(conn, subjectname, currenttopic):
     except ValueError:
         pass
     return None
+
 
 
 # --------------------
