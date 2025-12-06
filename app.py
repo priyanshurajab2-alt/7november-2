@@ -331,22 +331,23 @@ def get_user_note(conn_unused, user_id, question_id):
     finally:
         user_conn.close()
 
-def getnexttopic(conn, subjectname, currenttopic):
-    """Get next topic sorted by chapter then topic name - FIXED"""
-    # Get ALL topics with their chapters, ordered properly
-    topics = conn.execute("""
-        SELECT DISTINCT topic, chapter 
+def get_next_topic(conn, subject_name, current_topic):
+    """Get next topic sorted by CHAPTER first, then topic name"""
+    topics = conn.execute(
+        '''
+        SELECT DISTINCT topic 
         FROM qbank 
-        WHERE LOWER(subject) = ? AND topic != '' AND topic != 'None'
+        WHERE LOWER(subject) = ? AND topic != "" AND topic != "None"
         ORDER BY chapter ASC, topic ASC
-    """, (subjectname.lower(),)).fetchall()
+        ''',
+        (subject_name.lower(),)
+    ).fetchall()
     
-    topiclist = [t['topic'] for t in topics]
-    
+    topic_list = [t['topic'] for t in topics]
     try:
-        currentindex = topiclist.index(currenttopic)
-        if currentindex < len(topiclist) - 1:
-            return topiclist[currentindex + 1]
+        current_index = topic_list.index(current_topic)
+        if current_index < len(topic_list) - 1:
+            return topic_list[current_index + 1]
     except ValueError:
         pass
     return None
