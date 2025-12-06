@@ -331,26 +331,22 @@ def get_user_note(conn_unused, user_id, question_id):
     finally:
         user_conn.close()
 
-def get_next_topic(conn, subject_name, current_topic):
-    """Get the next topic in the same subject"""
-    topics = conn.execute(
-        '''
-        SELECT DISTINCT topic 
-        FROM qbank 
-        WHERE LOWER(subject) = ? AND topic != "" 
-        ORDER BY topic
-        ''',
-        (subject_name.lower(),)
-    ).fetchall()
+def getnexttopic(conn, subjectname, currenttopic):
+    topics = conn.execute("""
+        SELECT DISTINCT topic FROM qbank 
+        WHERE LOWER(subject) = ? AND topic != '' 
+        ORDER BY chapter, topic  # ← Add chapter first
+    """, (subjectname.lower(),)).fetchall()
     
-    topic_list = [t['topic'] for t in topics]
+    topiclist = [t['topic'] for t in topics]
     try:
-        current_index = topic_list.index(current_topic)
-        if current_index < len(topic_list) - 1:
-            return topic_list[current_index + 1]
+        currentindex = topiclist.index(currenttopic)
+        if currentindex < len(topiclist) - 1:
+            return topiclist[currentindex + 1]
     except ValueError:
         pass
     return None
+
 
 # --------------------
 # CENTRALIZED DATABASE OPERATIONS
