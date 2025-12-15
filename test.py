@@ -227,12 +227,19 @@ def review_test(test_id):
 
 @test_bp.route('/tests/<int:test_id>/review-attempted')
 def review_attempted(test_id):
+    print(f"DEBUG REVIEW_ATTEMPTED: test_id={test_id}")
+    
     conn = get_connection()
     try:
         test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
-        user_id = session.get('user_id', 1)
+        print(f"DEBUG: Test '{test['test_name'] if test else 'NOT FOUND'}'")
+        if not test:
+            flash(f"Test ID {test_id} not found!")
+            return redirect(url_for('test_bp.list_tests'))
         
-        # FIXED: LEFT JOIN shows ALL questions
+        user_id = session.get('user_id', 1)
+        print(f"DEBUG: Looking for user_id={user_id}")
+        
         all_questions = conn.execute('''
             SELECT tq.*, ur.user_answer, ur.is_correct
             FROM test_questions tq
@@ -241,10 +248,13 @@ def review_attempted(test_id):
             WHERE tq.test_id = ?
             ORDER BY tq.id
         ''', (test_id, user_id, test_id)).fetchall()
+        print(f"DEBUG: Total questions found: {len(all_questions)}")
         
         correct_questions = [q for q in all_questions if q['is_correct'] == 1]
         incorrect_questions = [q for q in all_questions if q['is_correct'] == 0]
         unanswered_questions = [q for q in all_questions if q['is_correct'] is None]
+        
+        print(f"DEBUG: Correct={len(correct_questions)}, Wrong={len(incorrect_questions)}, Unanswered={len(unanswered_questions)}")
         
     finally:
         conn.close()
@@ -260,11 +270,17 @@ def review_attempted(test_id):
 
 @test_bp.route('/tests/<int:test_id>/review/<string:filter_type>/<int:q_index>')
 def review_question(test_id, filter_type, q_index):
+    print(f"DEBUG REVIEW_QUESTION: test_id={test_id}, filter={filter_type}, q_index={q_index}")
+    
     conn = get_connection()
     try:
         test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
-        user_id = session.get('user_id', 1)
+        print(f"DEBUG: Test '{test['test_name'] if test else 'NOT FOUND'}'")
+        if not test:
+            flash(f"Test ID {test_id} not found!")
+            return redirect(url_for('test_bp.list_tests'))
         
+        user_id = session.get('user_id', 1)
         base_query = '''
             SELECT tq.*, ur.user_answer, ur.is_correct, tq.explanation
             FROM test_questions tq
@@ -274,52 +290,61 @@ def review_question(test_id, filter_type, q_index):
         '''
         
         if filter_type == 'correct':
-            questions = conn.execute(base_query + ' AND (ur.is_correct = 1 OR ur.is_correct IS NULL)', 
-                                   (test_id, user_id, test_id)).fetchall()
+            questions = conn.execute(base_query + ' AND ur.is_correct = 1', (test_id, user_id, test_id)).fetchall()
         elif filter_type == 'unanswered':
-            questions = conn.execute(base_query + ' AND ur.is_correct IS NULL', 
-                                   (test_id, user_id, test_id)).fetchall()
+            questions = conn.execute(base_query + ' AND ur.is_correct IS NULL', (test_id, user_id, test_id)).fetchall()
         else:  # incorrect
-            questions = conn.execute(base_query + ' AND ur.is_correct = 0', 
-                                   (test_id, user_id, test_id)).fetchall()
+            questions = conn.execute(base_query + ' AND ur.is_correct = 0', (test_id, user_id, test_id)).fetchall()
         
+        print(f"DEBUG: Filter '{filter_type}' found {len(questions)} questions")
         if not questions or q_index < 1 or q_index > len(questions):
+            print(f"DEBUG: Invalid q_index {q_index} for {len(questions)} questions")
             abort(404)
-            
+        
         question = questions[q_index - 1]
-        prev_q = q_index - 1 if q_index > 1 else None
-        next_q = q_index + 1 if q_index < len(questions) else None
+        print(f"DEBUG: Showing Q{question['id']}: user_answer={question['user_answer']}, is_correct={question['is_correct']}")
         
     finally:
         conn.close()
     
     return render_template('test/review_question.html',
                            test=test, question=question, q_index=q_index, total=len(questions),
-                          filter_type=filter_type, prev_q=prev_q, next_q=next_q)
+                           filter_type=filter_type, prev_q=(q_index-1 if q_index > 1 else None), 
+                           next_q=(q_index+1 if q_index < len(questions) else None))
 
 @test_bp.route('/tests/<int:test_id>/submit', methods=['GET', 'POST'])
 def submit_test(test_id):
+    print(f"DEBUG SUBMIT: test_id={test_id}")
+    
     if request.method == 'POST' and request.form.get('review') == 'review':
+        print("DEBUG: Redirecting to review")
         return redirect(url_for('test_bp.review_attempted', test_id=test_id))
     
     conn = get_connection()
     try:
+        # DEBUG: Check test exists
+        test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
+        print(f"DEBUG: Test found: {test['test_name'] if test else 'NOT FOUND'}")
+        if not test:
+            flash(f"Test ID {test_id} not found!")
+            return redirect(url_for('test_bp.list_tests'))
+        
         questions = conn.execute(
-            '''SELECT id, correct_answer FROM test_questions WHERE test_id = ? ORDER BY id''',
+            'SELECT id, correct_answer FROM test_questions WHERE test_id = ? ORDER BY id',
             (test_id,)
         ).fetchall()
-        test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
+        print(f"DEBUG: Questions found: {len(questions)}")
         
         user_id = session.get('user_id', 1)
         answer_key = f'test_{test_id}_answers'
         answers = session.get(answer_key, {})
+        print(f"DEBUG: Session answers: {answers}")
         
-        # FIXED: Case-insensitive scoring + ALL questions
         for q in questions:
             qid = str(q['id'])
             user_answer = answers.get(qid)
-            # CASE-INSENSITIVE COMPARISON
             is_correct = 1 if user_answer and user_answer.upper() == q['correct_answer'].upper() else 0
+            print(f"DEBUG Q{q['id']}: user='{user_answer}', correct='{q['correct_answer']}', score={is_correct}")
             
             conn.execute('''
                 INSERT INTO user_responses (test_id, user_id, question_id, user_answer, is_correct)
@@ -327,8 +352,8 @@ def submit_test(test_id):
             ''', (test_id, user_id, q['id'], user_answer, is_correct))
         
         conn.commit()
+        print("DEBUG: Responses saved")
         
-        # FIXED: Case-insensitive score calculation
         total = len(questions)
         correct = sum(1 for q in questions if answers.get(str(q['id'])) 
                      and answers.get(str(q['id'])).upper() == q['correct_answer'].upper())
@@ -339,9 +364,7 @@ def submit_test(test_id):
     finally:
         conn.close()
 
-    # Clear session
     for key in [f'test_{test_id}_answers', f'test_{test_id}_marked', f'test_{test_id}_skipped']:
         session.pop(key, None)
 
-    return render_template('test/report.html',
-                           test=test, total=total, correct=correct, wrong=wrong, unanswered=unanswered)
+    return render_template('test/report.html', test=test, total=total, correct=correct, wrong=wrong, unanswered=unanswered)
