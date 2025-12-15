@@ -72,19 +72,23 @@ class DynamicDatabaseHandler:
                     option_c TEXT NOT NULL,
                     option_d TEXT NOT NULL,
                     correct_answer TEXT NOT NULL, -- one of 'a', 'b', 'c', 'd'
+                    explanation TEXT,
                     FOREIGN KEY (test_id) REFERENCES test_info (id)
                 )
             ''',
             'test_results': '''
-                CREATE TABLE IF NOT EXISTS test_results (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    test_id INTEGER NOT NULL,
-                    user_id INTEGER,
-                    score INTEGER,
-                    taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (test_id) REFERENCES test_info (id)
-                )
-            '''
+                CREATE TABLE IF NOT EXISTS user_responses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                test_id INTEGER NOT NULL,
+                user_id INTEGER,
+                question_id INTEGER NOT NULL,
+                user_answer TEXT,
+                is_correct INTEGER DEFAULT 0,
+                taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (test_id) REFERENCES test_info (id),
+                FOREIGN KEY (question_id) REFERENCES test_questions (id)
+            )
+        '''
         }
 
     def get_qbank_schema(self):
