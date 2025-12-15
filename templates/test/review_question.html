@@ -1,1 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Review Question - {{ test.test_name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .question-box { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; }
+        .explanation { background: #e8f5e8; padding: 15px; border-left: 4px solid #28a6; border-radius: 5px; }
+    </style>
+</head>
+<body class="container mt-5">
+    <h3>{{ question.subject }} - {{ question.topic }}</h3>
+    
+    <div class="question-box">
+        <h5><strong>Question:</strong></h5>
+        <p class="lead">{{ question.question }}</p>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Your Answer:</strong> 
+                    <span class="{% if question.is_correct == 1 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                        {{ question.user_answer|upper if question.user_answer else 'Not Answered' }}
+                    </span>
+                </p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Correct Answer:</strong> 
+                    <span class="text-success fw-bold">{{ question.correct_answer|upper }}</span>
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    {% if question.explanation %}
+    <div class="explanation">
+        <h6><strong>📖 Explanation:</strong></h6>
+        <p>{{ question.explanation }}</p>
+    </div>
+    {% endif %}
+    
+    <div class="mt-4">
+        <p class="text-muted">Question {{ q_index }} of {{ total }} ({{ filter_type|title }} answers)</p>
+        
+        <div class="btn-group" role="group">
+            {% if prev_q %}
+            <a href="{{ url_for('test_bp.review_question', test_id=test.id, filter_type=filter_type, q_index=prev_q) }}" 
+               class="btn btn-secondary">← Previous</a>
+            {% endif %}
+            
+            {% if next_q %}
+            <a href="{{ url_for('test_bp.review_question', test_id=test.id, filter_type=filter_type, q_index=next_q) }}" 
+               class="btn btn-primary">Next →</a>
+            {% endif %}
+        </div>
+        
+        <a href="{{ url_for('test_bp.review_attempted', test_id=test.id) }}" class="btn btn-outline-secondary ms-2">Back to Review</a>
+        <a href="{{ url_for('test_bp.list_tests') }}" class="btn btn-outline-secondary ms-2">All Tests</a>
+    </div>
+</body>
+</html>
 
