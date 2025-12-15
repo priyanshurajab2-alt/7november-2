@@ -270,17 +270,19 @@ def review_attempted(test_id):
 
 @test_bp.route('/tests/<int:test_id>/review/<string:filter_type>/<int:q_index>')
 def review_question(test_id, filter_type, q_index):
-    print(f"DEBUG REVIEW_QUESTION: test_id={test_id}, filter={filter_type}, q_index={q_index}")
+    print(f"DEBUG: review_question - test_id={test_id}, filter={filter_type}, q_index={q_index}")
     
     conn = get_connection()
     try:
+        # 1. Verify test exists
         test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
-        print(f"DEBUG: Test '{test['test_name'] if test else 'NOT FOUND'}'")
         if not test:
             flash(f"Test ID {test_id} not found!")
             return redirect(url_for('test_bp.list_tests'))
         
         user_id = session.get('user_id', 1)
+        
+        # 2. Base LEFT JOIN query for ALL questions
         base_query = '''
             SELECT tq.*, ur.user_answer, ur.is_correct, tq.explanation
             FROM test_questions tq
@@ -289,28 +291,41 @@ def review_question(test_id, filter_type, q_index):
             WHERE tq.test_id = ?
         '''
         
+        # 3. Filter by filter_type
         if filter_type == 'correct':
-            questions = conn.execute(base_query + ' AND ur.is_correct = 1', (test_id, user_id, test_id)).fetchall()
-        elif filter_type == 'unanswered':
-            questions = conn.execute(base_query + ' AND ur.is_correct IS NULL', (test_id, user_id, test_id)).fetchall()
-        else:  # incorrect
-            questions = conn.execute(base_query + ' AND ur.is_correct = 0', (test_id, user_id, test_id)).fetchall()
+            where_clause = ' AND (ur.is_correct = 1 OR ur.is_correct IS NULL)'
+        elif filter_type == 'incorrect':
+            where_clause = ' AND ur.is_correct = 0'
+        elif filter_type == 'all':
+            where_clause = ''  # Show ALL questions
+        else:
+            abort(404, "Invalid filter")
         
-        print(f"DEBUG: Filter '{filter_type}' found {len(questions)} questions")
+        questions = conn.execute(base_query + where_clause, (test_id, user_id, test_id)).fetchall()
+        print(f"DEBUG: Filter '{filter_type}' returned {len(questions)} questions")
+        
         if not questions or q_index < 1 or q_index > len(questions):
-            print(f"DEBUG: Invalid q_index {q_index} for {len(questions)} questions")
-            abort(404)
+            flash("No questions found for this filter")
+            return redirect(url_for('test_bp.review_attempted', test_id=test_id))
         
+        # 4. Current question + navigation
         question = questions[q_index - 1]
-        print(f"DEBUG: Showing Q{question['id']}: user_answer={question['user_answer']}, is_correct={question['is_correct']}")
+        prev_q = q_index - 1 if q_index > 1 else None
+        next_q = q_index + 1 if q_index < len(questions) else None
+        
+        print(f"DEBUG: Showing question {question['id']}: user_answer={question['user_answer']}, is_correct={question['is_correct']}")
         
     finally:
         conn.close()
     
     return render_template('test/review_question.html',
-                           test=test, question=question, q_index=q_index, total=len(questions),
-                           filter_type=filter_type, prev_q=(q_index-1 if q_index > 1 else None), 
-                           next_q=(q_index+1 if q_index < len(questions) else None))
+                           test=test,
+                           question=question,
+                           q_index=q_index,
+                           total=len(questions),
+                           filter_type=filter_type,
+                           prev_q=prev_q,
+                           next_q=next_q)
 
 @test_bp.route('/tests/<int:test_id>/submit', methods=['GET', 'POST'])
 def submit_test(test_id):
