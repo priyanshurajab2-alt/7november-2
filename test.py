@@ -227,14 +227,13 @@ def review_test(test_id):
 
 @test_bp.route('/tests/<int:test_id>/review-attempted')
 def review_attempted(test_id):
-    """Review page with correct/incorrect filters"""
     conn = get_connection()
     try:
         test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
         user_id = session.get('user_id', 1)
         
-        # FIXED: Use LEFT JOIN to get ALL questions
-        responses = conn.execute('''
+        # FIXED: LEFT JOIN shows ALL questions
+        all_questions = conn.execute('''
             SELECT tq.*, ur.user_answer, ur.is_correct
             FROM test_questions tq
             LEFT JOIN user_responses ur ON tq.id = ur.question_id 
@@ -243,9 +242,9 @@ def review_attempted(test_id):
             ORDER BY tq.id
         ''', (test_id, user_id, test_id)).fetchall()
         
-        correct_questions = [q for q in responses if q['is_correct'] == 1]
-        incorrect_questions = [q for q in responses if q['is_correct'] == 0]
-        unanswered_questions = [q for q in responses if q['is_correct'] is None]
+        correct_questions = [q for q in all_questions if q['is_correct'] == 1]
+        incorrect_questions = [q for q in all_questions if q['is_correct'] == 0]
+        unanswered_questions = [q for q in all_questions if q['is_correct'] is None]
         
     finally:
         conn.close()
@@ -261,15 +260,13 @@ def review_attempted(test_id):
 
 @test_bp.route('/tests/<int:test_id>/review/<string:filter_type>/<int:q_index>')
 def review_question(test_id, filter_type, q_index):
-    """Individual question review with explanation and navigation"""
     conn = get_connection()
     try:
         test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
         user_id = session.get('user_id', 1)
         
-        # FIXED: Base query with LEFT JOIN
         base_query = '''
-            SELECT tq.*, ur.user_answer, ur.is_correct, ur.id as response_id
+            SELECT tq.*, ur.user_answer, ur.is_correct, tq.explanation
             FROM test_questions tq
             LEFT JOIN user_responses ur ON tq.id = ur.question_id 
                 AND ur.test_id = ? AND ur.user_id = ?
@@ -297,14 +294,8 @@ def review_question(test_id, filter_type, q_index):
         conn.close()
     
     return render_template('test/review_question.html',
-                           test=test,
-                           question=question,
-                           q_index=q_index,
-                           total=len(questions),
-                           filter_type=filter_type,
-                           prev_q=prev_q,
-                           next_q=next_q)
-
+                           test=test, question=question, q_index=q_index, total=len(questions),
+                          filter_type=filter_type, prev_q=prev_q, next_q=next_q)
 
 @test_bp.route('/tests/<int:test_id>/submit', methods=['GET', 'POST'])
 def submit_test(test_id):
@@ -319,40 +310,38 @@ def submit_test(test_id):
         ).fetchall()
         test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
         
-        # Save user responses to user_responses table
-        user_id = session.get('user_id', 1)  # Default to 1 if no user session
+        user_id = session.get('user_id', 1)
         answer_key = f'test_{test_id}_answers'
         answers = session.get(answer_key, {})
         
-        # Insert all responses into user_responses table
+        # FIXED: Case-insensitive scoring + ALL questions
         for q in questions:
-            qid = q['id']
-            user_answer = answers.get(str(qid))
-            is_correct = 1 if user_answer and user_answer == q['correct_answer'] else 0
+            qid = str(q['id'])
+            user_answer = answers.get(qid)
+            # CASE-INSENSITIVE COMPARISON
+            is_correct = 1 if user_answer and user_answer.upper() == q['correct_answer'].upper() else 0
             
             conn.execute('''
                 INSERT INTO user_responses (test_id, user_id, question_id, user_answer, is_correct)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (test_id, user_id, qid, user_answer, is_correct))
+            ''', (test_id, user_id, q['id'], user_answer, is_correct))
         
         conn.commit()
         
-        # Calculate scores
+        # FIXED: Case-insensitive score calculation
         total = len(questions)
-        correct = sum(1 for q in questions if answers.get(str(q['id'])) == q['correct_answer'])
-        wrong = sum(1 for q in questions if answers.get(str(q['id'])) and answers.get(str(q['id'])) != q['correct_answer'])
+        correct = sum(1 for q in questions if answers.get(str(q['id'])) 
+                     and answers.get(str(q['id'])).upper() == q['correct_answer'].upper())
+        wrong = sum(1 for q in questions if answers.get(str(q['id'])) 
+                   and answers.get(str(q['id'])).upper() != q['correct_answer'].upper())
         unanswered = total - correct - wrong
         
     finally:
         conn.close()
 
-    # Clear session keys
+    # Clear session
     for key in [f'test_{test_id}_answers', f'test_{test_id}_marked', f'test_{test_id}_skipped']:
         session.pop(key, None)
 
     return render_template('test/report.html',
-                           test=test,
-                           total=total,
-                           correct=correct,
-                           wrong=wrong,
-                           unanswered=unanswered)
+                           test=test, total=total, correct=correct, wrong=wrong, unanswered=unanswered)
