@@ -4,7 +4,7 @@ import os
 
 
 test_bp = Blueprint('test_bp', __name__, template_folder='templates')
-DATABASE = os.environ.get('TEST_DB_FILE', 'test_database.db')
+DATABASE = os.environ.get('TEST_DB_FILE', 'test.db')
 
 
 def get_connection():
