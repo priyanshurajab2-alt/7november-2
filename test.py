@@ -233,17 +233,19 @@ def review_attempted(test_id):
         test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
         user_id = session.get('user_id', 1)
         
-        # Get user's responses for this test
+        # FIXED: Use LEFT JOIN to get ALL questions
         responses = conn.execute('''
             SELECT tq.*, ur.user_answer, ur.is_correct
             FROM test_questions tq
-            JOIN user_responses ur ON tq.id = ur.question_id 
-            WHERE tq.test_id = ? AND ur.test_id = ? AND ur.user_id = ?
+            LEFT JOIN user_responses ur ON tq.id = ur.question_id 
+                AND ur.test_id = ? AND ur.user_id = ?
+            WHERE tq.test_id = ?
             ORDER BY tq.id
-        ''', (test_id, test_id, user_id)).fetchall()
+        ''', (test_id, user_id, test_id)).fetchall()
         
         correct_questions = [q for q in responses if q['is_correct'] == 1]
         incorrect_questions = [q for q in responses if q['is_correct'] == 0]
+        unanswered_questions = [q for q in responses if q['is_correct'] is None]
         
     finally:
         conn.close()
@@ -252,8 +254,10 @@ def review_attempted(test_id):
                            test=test,
                            correct_count=len(correct_questions),
                            incorrect_count=len(incorrect_questions),
+                           unanswered_count=len(unanswered_questions),
                            correct_questions=correct_questions,
-                           incorrect_questions=incorrect_questions)
+                           incorrect_questions=incorrect_questions,
+                           unanswered_questions=unanswered_questions)
 
 @test_bp.route('/tests/<int:test_id>/review/<string:filter_type>/<int:q_index>')
 def review_question(test_id, filter_type, q_index):
@@ -263,23 +267,24 @@ def review_question(test_id, filter_type, q_index):
         test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
         user_id = session.get('user_id', 1)
         
-        # Get filtered questions
+        # FIXED: Base query with LEFT JOIN
+        base_query = '''
+            SELECT tq.*, ur.user_answer, ur.is_correct, ur.id as response_id
+            FROM test_questions tq
+            LEFT JOIN user_responses ur ON tq.id = ur.question_id 
+                AND ur.test_id = ? AND ur.user_id = ?
+            WHERE tq.test_id = ?
+        '''
+        
         if filter_type == 'correct':
-            questions = conn.execute('''
-                SELECT tq.*, ur.user_answer, ur.is_correct
-                FROM test_questions tq
-                JOIN user_responses ur ON tq.id = ur.question_id 
-                WHERE tq.test_id = ? AND ur.test_id = ? AND ur.user_id = ? AND ur.is_correct = 1
-                ORDER BY tq.id
-            ''', (test_id, test_id, user_id)).fetchall()
+            questions = conn.execute(base_query + ' AND (ur.is_correct = 1 OR ur.is_correct IS NULL)', 
+                                   (test_id, user_id, test_id)).fetchall()
+        elif filter_type == 'unanswered':
+            questions = conn.execute(base_query + ' AND ur.is_correct IS NULL', 
+                                   (test_id, user_id, test_id)).fetchall()
         else:  # incorrect
-            questions = conn.execute('''
-                SELECT tq.*, ur.user_answer, ur.is_correct
-                FROM test_questions tq
-                JOIN user_responses ur ON tq.id = ur.question_id 
-                WHERE tq.test_id = ? AND ur.test_id = ? AND ur.user_id = ? AND ur.is_correct = 0
-                ORDER BY tq.id
-            ''', (test_id, test_id, user_id)).fetchall()
+            questions = conn.execute(base_query + ' AND ur.is_correct = 0', 
+                                   (test_id, user_id, test_id)).fetchall()
         
         if not questions or q_index < 1 or q_index > len(questions):
             abort(404)
@@ -299,7 +304,6 @@ def review_question(test_id, filter_type, q_index):
                            filter_type=filter_type,
                            prev_q=prev_q,
                            next_q=next_q)
-
 
 
 @test_bp.route('/tests/<int:test_id>/submit', methods=['GET', 'POST'])
