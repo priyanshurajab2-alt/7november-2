@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Review Attempted - {{ test.test_name }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #eee; }
+        .filter-tabs { display: flex; gap: 10px; margin-bottom: 30px; }
+        .filter-tab { padding: 10px 20px; border: 2px solid #dee2e6; border-radius: 25px; text-decoration: none; color: #495057; font-weight: 500; transition: all 0.3s; }
+        .filter-tab.active, .filter-tab:hover { background: #007bff; color: white; border-color: #007bff; }
+        .question-card { border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin-bottom: 15px; transition: box-shadow 0.3s; }
+        .question-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .question-status { float: right; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: bold; }
+        .correct { background: #d4edda; color: #155724; }
+        .incorrect { background: #f8d7da; color: #721c24; }
+        .question-summary { cursor: pointer; padding: 15px; border-radius: 5px; transition: background 0.3s; }
+        .question-summary:hover { background: #f8f9fa; }
+        .question-text { font-weight: 600; margin-bottom: 8px; }
+        .user-answer { font-style: italic; color: #6c757d; margin-top: 5px; }
+        .stats { background: #e9ecef; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .stat-item { display: inline-block; margin: 0 20px; text-align: center; }
+        .stat-number { font-size: 2em; font-weight: bold; display: block; }
+        .btn { display: inline-block; padding: 10px 20px; margin: 5px; text-decoration: none; border-radius: 5px; font-weight: bold; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ test.test_name }} - Review Attempted</h1>
+            <a href="{{ url_for('test_bp.list_tests') }}" class="btn btn-secondary">← Back to Tests</a>
+        </div>
+
+        <div class="stats">
+            <div class="stat-item">
+                <span class="stat-number" style="color: #28a745;">{{ correct_count }}</span>
+                Correct
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" style="color: #dc3545;">{{ incorrect_count }}</span>
+                Incorrect
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">{{ correct_count + incorrect_count }}</span>
+                Attempted
+            </div>
+        </div>
+
+        <div class="filter-tabs">
+            <a href="{{ url_for('test_bp.review_attempted', test_id=test.id, filter='all') }}" 
+               class="filter-tab {{ 'active' if filter_type == 'all' else '' }}">All ({{ correct_count + incorrect_count }})</a>
+            <a href="{{ url_for('test_bp.review_attempted', test_id=test.id, filter='correct') }}" 
+               class="filter-tab {{ 'active' if filter_type == 'correct' else '' }}">Correct ({{ correct_count }})</a>
+            <a href="{{ url_for('test_bp.review_attempted', test_id=test.id, filter='incorrect') }}" 
+               class="filter-tab {{ 'active' if filter_type == 'incorrect' else '' }}">Incorrect ({{ incorrect_count }})</a>
+        </div>
+
+        {% for response in responses %}
+        <div class="question-card">
+            <div class="question-status {{ 'correct' if response.is_correct else 'incorrect' }}">
+                {{ '✅ Correct' if response.is_correct else '❌ Incorrect' }}
+            </div>
+            <a href="{{ url_for('test_bp.review_question', test_id=test.id, response_id=response.id, filter=filter_type) }}" 
+               class="question-summary">
+                <div class="question-text">
+                    {{ response.subject }} - {{ response.topic }}<br>
+                    <small>{{ response.question[:100] }}...</small>
+                </div>
+                <div class="user-answer">
+                    Your answer: {{ response.user_answer|upper }} 
+                    {% if response.user_answer == response.correct_answer %}
+                        (Correct: {{ response.correct_answer|upper }})
+                    {% else %}
+                        (Correct was: {{ response.correct_answer|upper }})
+                    {% endif %}
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+
+        {% if not responses %}
+        <div style="text-align: center; padding: 50px; color: #6c757d;">
+            <h3>No responses found for this filter.</h3>
+            <p>Try selecting a different filter or <a href="{{ url_for('test_bp.review_attempted', test_id=test.id) }}">view all</a>.</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
