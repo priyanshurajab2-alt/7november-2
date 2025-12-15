@@ -37,7 +37,8 @@ def view_test_questions(test_id):
             abort(404, description="Test not found")
 
         questions = conn.execute('''
-            SELECT subject, topic, question, option_a, option_b, option_c, option_d, correct_answer
+            SELECT subject, topic, question, option_a, option_b, option_c, option_d, 
+                   correct_answer, explanation
             FROM test_questions
             WHERE test_id = ?
             ORDER BY subject, topic, id
@@ -222,11 +223,90 @@ def review_test(test_id):
                            questions=questions,
                            answers=answers,
                            marked=marked,
-                           skipped=skipped)
+                           skipped=skipped
+
+@test_bp.route('/tests/<int:test_id>/review-attempted')
+def review_attempted(test_id):
+    """Review page with correct/incorrect filters"""
+    conn = get_connection()
+    try:
+        test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
+        user_id = session.get('user_id', 1)
+        
+        # Get user's responses for this test
+        responses = conn.execute('''
+            SELECT tq.*, ur.user_answer, ur.is_correct
+            FROM test_questions tq
+            JOIN user_responses ur ON tq.id = ur.question_id 
+            WHERE tq.test_id = ? AND ur.test_id = ? AND ur.user_id = ?
+            ORDER BY tq.id
+        ''', (test_id, test_id, user_id)).fetchall()
+        
+        correct_questions = [q for q in responses if q['is_correct'] == 1]
+        incorrect_questions = [q for q in responses if q['is_correct'] == 0]
+        
+    finally:
+        conn.close()
+    
+    return render_template('test/review_attempted.html',
+                           test=test,
+                           correct_count=len(correct_questions),
+                           incorrect_count=len(incorrect_questions),
+                           correct_questions=correct_questions,
+                           incorrect_questions=incorrect_questions)
+
+@test_bp.route('/tests/<int:test_id>/review/<string:filter_type>/<int:q_index>')
+def review_question(test_id, filter_type, q_index):
+    """Individual question review with explanation and navigation"""
+    conn = get_connection()
+    try:
+        test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
+        user_id = session.get('user_id', 1)
+        
+        # Get filtered questions
+        if filter_type == 'correct':
+            questions = conn.execute('''
+                SELECT tq.*, ur.user_answer, ur.is_correct
+                FROM test_questions tq
+                JOIN user_responses ur ON tq.id = ur.question_id 
+                WHERE tq.test_id = ? AND ur.test_id = ? AND ur.user_id = ? AND ur.is_correct = 1
+                ORDER BY tq.id
+            ''', (test_id, test_id, user_id)).fetchall()
+        else:  # incorrect
+            questions = conn.execute('''
+                SELECT tq.*, ur.user_answer, ur.is_correct
+                FROM test_questions tq
+                JOIN user_responses ur ON tq.id = ur.question_id 
+                WHERE tq.test_id = ? AND ur.test_id = ? AND ur.user_id = ? AND ur.is_correct = 0
+                ORDER BY tq.id
+            ''', (test_id, test_id, user_id)).fetchall()
+        
+        if not questions or q_index < 1 or q_index > len(questions):
+            abort(404)
+            
+        question = questions[q_index - 1]
+        prev_q = q_index - 1 if q_index > 1 else None
+        next_q = q_index + 1 if q_index < len(questions) else None
+        
+    finally:
+        conn.close()
+    
+    return render_template('test/review_question.html',
+                           test=test,
+                           question=question,
+                           q_index=q_index,
+                           total=len(questions),
+                           filter_type=filter_type,
+                           prev_q=prev_q,
+                           next_q=next_q)
 
 
-@test_bp.route('/tests/<int:test_id>/submit', methods=['GET'])
+
+@test_bp.route('/tests/<int:test_id>/submit', methods=['GET', 'POST'])
 def submit_test(test_id):
+    if request.method == 'POST' and request.form.get('review') == 'review':
+        return redirect(url_for('test_bp.review_attempted', test_id=test_id))
+    
     conn = get_connection()
     try:
         questions = conn.execute(
@@ -234,46 +314,41 @@ def submit_test(test_id):
             (test_id,)
         ).fetchall()
         test = conn.execute('SELECT * FROM test_info WHERE id = ?', (test_id,)).fetchone()
+        
+        # Save user responses to user_responses table
+        user_id = session.get('user_id', 1)  # Default to 1 if no user session
+        answer_key = f'test_{test_id}_answers'
+        answers = session.get(answer_key, {})
+        
+        # Insert all responses into user_responses table
+        for q in questions:
+            qid = q['id']
+            user_answer = answers.get(str(qid))
+            is_correct = 1 if user_answer and user_answer == q['correct_answer'] else 0
+            
+            conn.execute('''
+                INSERT INTO user_responses (test_id, user_id, question_id, user_answer, is_correct)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (test_id, user_id, qid, user_answer, is_correct))
+        
+        conn.commit()
+        
+        # Calculate scores
+        total = len(questions)
+        correct = sum(1 for q in questions if answers.get(str(q['id'])) == q['correct_answer'])
+        wrong = sum(1 for q in questions if answers.get(str(q['id'])) and answers.get(str(q['id'])) != q['correct_answer'])
+        unanswered = total - correct - wrong
+        
     finally:
         conn.close()
 
-    answer_key = f'test_{test_id}_answers'
-    mark_key = f'test_{test_id}_marked'
-    skip_key = f'test_{test_id}_skipped'
-
-    answers = session.get(answer_key, {})
-    marked = set(session.get(mark_key, []))
-    skipped = set(session.get(skip_key, []))
-
-    total = len(questions)
-    correct = 0
-    wrong = 0
-    unanswered = 0
-
-    for q in questions:
-        qid = str(q['id'])
-        ans = answers.get(qid)
-        if ans is None:
-            if qid in skipped:
-                # Count skipped as unanswered for scoring
-                unanswered += 1
-            else:
-                unanswered += 1
-        elif ans == q['correct_answer']:
-            correct += 1
-        else:
-            wrong += 1
-
-    # Clear session keys to avoid confusion on retake (optional)
-    session.pop(answer_key, None)
-    session.pop(mark_key, None)
-    session.pop(skip_key, None)
+    # Clear session keys
+    for key in [f'test_{test_id}_answers', f'test_{test_id}_marked', f'test_{test_id}_skipped']:
+        session.pop(key, None)
 
     return render_template('test/report.html',
                            test=test,
                            total=total,
                            correct=correct,
                            wrong=wrong,
-                           unanswered=unanswered,
-                           marked=marked,
-                           skipped=skipped)
+                           unanswered=unanswered)
