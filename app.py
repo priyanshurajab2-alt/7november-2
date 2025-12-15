@@ -7,7 +7,7 @@ import os
 # Add this import at the top of app.py
 from mcq import register_mcq_routes
 from flask import Flask
-from test import test_bp   # Import the test blueprint (replace with your module name)
+from test2 import test_bp   # Import the test blueprint (replace with your module name)
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'  # Required for sessions and flashes
