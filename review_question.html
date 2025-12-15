@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Question Review</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #007bff; }
+        .status-badge { padding: 8px 16px; border-radius: 25px; font-weight: bold; font-size: 1.1em; }
+        .correct { background: #d4edda; color: #155724; border: 2px solid #28a745; }
+        .incorrect { background: #f8d7da; color: #721c24; border: 2px solid #dc3545; }
+        .question-section { background: #f8f9fa; padding: 25px; border-radius: 10px; margin: 20px 0; }
+        .question-text { font-size: 1.3em; font-weight: 600; margin-bottom: 20px; line-height: 1.5; }
+        .options { list-style: none; padding: 0; }
+        .option { padding: 15px; margin: 10px 0; background: white; border-radius: 8px; border-left: 5px solid #dee2e6; transition: all 0.3s; }
+        .option:hover { border-left-width: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .option.correct { border-left-color: #28a745; background: #d4edda; }
+        .option.incorrect { border-left-color: #dc3545; background: #f8d7da; }
+        .option.selected { border-left-color: #007bff; background: #cce7ff; }
+        .explanation { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; border-radius: 10px; margin-top: 25px; }
+        .explanation h3 { margin-top: 0; }
+        .navigation { display: flex; justify-content: space-between; margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; }
+        .nav-btn { padding: 12px 24px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.3s; text-decoration: none; display: inline-block; }
+        .nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .nav-prev { background: #6c757d; color: white; }
+        .nav-next { background: #007bff; color: white; }
+        .nav-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .btn-back { background: #6c757d; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+        .summary { background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>{{ response.subject }} - {{ response.topic }}</h1>
+                <span class="status-badge {{ 'correct' if response.is_correct else 'incorrect' }}">
+                    {{ '✅ Correct' if response.is_correct else '❌ Incorrect' }}
+                </span>
+            </div>
+            <a href="{{ url_for('test_bp.review_attempted', test_id=response.test_id, filter=request.args.get('filter', 'all')) }}" class="btn-back">
+                ← Back to Review
+            </a>
+        </div>
+
+        <div class="summary">
+            <strong>Your Answer:</strong> {{ response.user_answer|upper }}
+            {% if response.user_answer != response.correct_answer %}
+                <strong style="color: #dc3545;"> → Correct Answer: {{ response.correct_answer|upper }}</strong>
+            {% endif %}
+        </div>
+
+        <div class="question-section">
+            <div class="question-text">{{ response.question }}</div>
+            
+            <ul class="options">
+                <li class="option {{ 'correct' if response.correct_answer == 'a' else '' }} {{ 'selected' if response.user_answer == 'a' else '' }}">A. {{ response.option_a }}</li>
+                <li class="option {{ 'correct' if response.correct_answer == 'b' else '' }} {{ 'selected' if response.user_answer == 'b' else '' }}">B. {{ response.option_b }}</li>
+                <li class="option {{ 'correct' if response.correct_answer == 'c' else '' }} {{ 'selected' if response.user_answer == 'c' else '' }}">C. {{ response.option_c }}</li>
+                <li class="option {{ 'correct' if response.correct_answer == 'd' else '' }} {{ 'selected' if response.user_answer == 'd' else '' }}">D. {{ response.option_d }}</li>
+            </ul>
+        </div>
+
+        {% if response.explanation %}
+        <div class="explanation">
+            <h3>📘 Explanation</h3>
+            <p>{{ response.explanation }}</p>
+        </div>
+        {% endif %}
+
+        <div class="navigation">
+            <a href="{{ url_for('test_bp.review_question', test_id=response.test_id, response_id=prev_response_id, filter=request.args.get('filter', 'all')) }}" 
+               class="nav-btn nav-prev {{ 'disabled' if not prev_response_id else '' }}"
+               {% if not prev_response_id %}onclick="return false;"{% endif %}>
+                ← Previous
+            </a>
+            <span style="align-self: center; font-weight: 500;">
+                Question {{ loop.index }} of {{ total_in_group or 1 }}
+            </span>
+            <a href="{{ url_for('test_bp.review_question', test_id=response.test_id, response_id=next_response_id, filter=request.args.get('filter', 'all')) }}" 
+               class="nav-btn nav-next {{ 'disabled' if not next_response_id else '' }}"
+               {% if not next_response_id %}onclick="return false;"{% endif %}>
+                Next →
+            </a>
+        </div>
+    </div>
+</body>
+</html>
