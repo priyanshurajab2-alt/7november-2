@@ -223,7 +223,7 @@ def review_test(test_id):
                            questions=questions,
                            answers=answers,
                            marked=marked,
-                           skipped=skipped
+                           skipped=skipped)
 
 @test_bp.route('/tests/<int:test_id>/review-attempted')
 def review_attempted(test_id):
