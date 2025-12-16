@@ -9,10 +9,20 @@ from mcq import register_mcq_routes
 from flask import Flask
 from test import test_bp   # Import the test blueprint (replace with your module name)
 
+
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'  # Required for sessions and flashes
 
 # Register the blueprint(s)
+import os
+
+# PERSISTENT STORAGE PATHS
+DATA_DIR = '/var/data'
+os.makedirs(DATA_DIR, exist_ok=True)
+
+USER_DB_FILE = os.path.join(DATA_DIR, 'admin_users.db')
+DB_FILE = os.path.join(DATA_DIR, '1st_year.db')
+TEST_DB_FILE = os.path.join(DATA_DIR, 'test.db')  # Your test database!
 
 
 
