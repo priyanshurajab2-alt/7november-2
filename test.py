@@ -1,6 +1,13 @@
 from flask import Blueprint, render_template, abort, request, redirect, url_for, flash, session, jsonify
 import sqlite3
+# At top of test.py
 import os
+DATABASE = os.environ.get('TEST_DB_FILE', '/var/data/test.db')
+
+def get_connection():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 test_bp = Blueprint('test_bp', __name__, template_folder='templates')
