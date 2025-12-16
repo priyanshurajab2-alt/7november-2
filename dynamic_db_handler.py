@@ -156,26 +156,33 @@ class DynamicDatabaseHandler:
     # Add the schema getter just below
     
     def discover_databases(self):
-        """Automatically discover databases based on patterns"""
-        discovered = {}
+    """Auto-discover databases from PERSISTENT /var/data"""
+    discovered = {}
+    
+    # 🔄 SCAN PERSISTENT DIRECTORY ONLY
+    base_path = '/var/data'
+    if not os.path.exists(base_path):
+        print(f"⚠️  Persistent disk /var/data not found - scanning current dir")
+        base_path = '.'
+    
+    for category, config in self.db_categories.items():
+        discovered[category] = []
         
-        for category, config in self.db_categories.items():
-            discovered[category] = []
-            
-            # Find all files matching the pattern
-            matching_files = glob.glob(config['pattern'])
-            
-            for db_file in matching_files:
-                if os.path.exists(db_file):
-                    db_info = {
-                        'file': db_file,
-                        'name': os.path.splitext(db_file)[0],
-                        'size': os.path.getsize(db_file),
-                        'modified': datetime.fromtimestamp(os.path.getmtime(db_file))
-                    }
-                    discovered[category].append(db_info)
+        # Scan persistent directory
+        pattern = os.path.join(base_path, config['pattern'])
+        matching_files = glob.glob(pattern)
         
-        return discovered
+        for db_file in matching_files:
+            if os.path.exists(db_file):
+                discovered[category].append({
+                    'file': db_file,
+                    'name': os.path.basename(os.path.splitext(db_file)[0]),
+                    'size': os.path.getsize(db_file),
+                    'modified': datetime.fromtimestamp(os.path.getmtime(db_file))
+                })
+    
+    return discovered
+
     
     def get_connection(self, db_file):
         """Get connection to any database file with proper error handling"""
