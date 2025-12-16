@@ -5,6 +5,13 @@ from datetime import datetime, timedelta
 import json
 import random
 from dynamic_db_handler import dynamic_db_handler
+import os
+
+# 🔄 PERSISTENT STORAGE - RENDER DISK
+DATA_DIR = '/var/data'
+os.makedirs(DATA_DIR, exist_ok=True)
+MCQ_DB_PATH = os.path.join(DATA_DIR, 'general_mcq.db')
+USER_DB_PATH = os.path.join(DATA_DIR, 'admin_users.db')
 
 
 # Create MCQ Blueprint
@@ -13,33 +20,41 @@ mcq_bp = Blueprint('mcq', __name__, url_prefix='/mcq')
 
 # MCQ Database Configuration
 def get_mcq_db_connection(subject=None):
-    """Get connection to appropriate MCQ database"""
+    """Get connection to appropriate MCQ database - PERSISTENT STORAGE"""
     if subject:
-        # Find MCQ database for specific subject
+        # Find MCQ database for specific subject in /var/data
         mcq_databases = dynamic_db_handler.discovered_databases.get('mcq', [])
         for db_info in mcq_databases:
             db_file = db_info['file']
-            if subject.lower() in db_file.lower():
+            if subject.lower() in db_file.lower() and '/var/data' in db_file:
                 return dynamic_db_handler.get_connection(db_file)
     
-    # Default to first available MCQ database
-    mcq_databases = dynamic_db_handler.discovered_databases.get('mcq', [])
-    if mcq_databases:
-        return dynamic_db_handler.get_connection(mcq_databases[0]['file'])
+    # Default to persistent MCQ database
+    if os.path.exists(MCQ_DB_PATH):
+        return dynamic_db_handler.get_connection(MCQ_DB_PATH)
     
-    # Fallback: create default MCQ database
+    # Fallback: create default MCQ database in persistent storage
     return create_default_mcq_database()
+
+    
 
 
 def get_user_db_connection():
-    """Get centralized user database connection"""
-    return sqlite3.connect('admin_users.db')
+    """Get centralized user database connection - PERSISTENT"""
+    return dynamic_db_handler.get_connection(USER_DB_PATH)
 
 
 def create_default_mcq_database():
-    """Create a default MCQ database if none exists"""
-    conn = sqlite3.connect('general_mcq.db')
+    """Create default MCQ database in PERSISTENT /var/data"""
+    conn = sqlite3.connect(MCQ_DB_PATH)  # Use persistent path
     conn.row_factory = sqlite3.Row
+    
+    # ... rest of schema creation stays the same ...
+    
+    conn.commit()
+    print(f"✅ Created persistent MCQ database: {MCQ_DB_PATH}")
+    return conn
+
     
     # Create MCQ questions table
     conn.execute('''
